@@ -1,0 +1,42 @@
+name: CI
+
+# When to run: every push to main, and every pull request
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test-app:
+    runs-on: ubuntu-latest          # a fresh Linux machine from GitHub
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4   # download your code
+      - uses: actions/setup-node@v4 # install Node
+        with:
+          node-version: 20
+      - run: npm ci                 # install exact dependencies
+      - run: npm test               # fail the build if any test fails
+
+  check-configs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Prometheus config and alert rules
+        run: |
+          docker run --rm -v "$PWD/prometheus:/etc/prometheus" --entrypoint promtool \
+            prom/prometheus:v2.53.0 check config /etc/prometheus/prometheus.yml
+
+      - name: Check Alertmanager config
+        run: |
+          docker run --rm -v "$PWD/alertmanager:/etc/alertmanager" --entrypoint amtool \
+            prom/alertmanager:v0.27.0 check-config /etc/alertmanager/alertmanager.yml
+
+      - name: Check docker-compose.yml
+        run: docker compose config --quiet
+
+      - name: Build the app image
+        run: docker build -t orders-api:ci ./app
