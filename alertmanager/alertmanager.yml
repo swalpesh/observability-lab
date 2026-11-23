@@ -1,0 +1,15 @@
+route:
+  receiver: slack                 # default destination for every alert
+  group_by: [alertname]           # bundle alerts with the same name into one message
+  group_wait: 30s                 # wait 30s to collect related alerts before the first message
+  group_interval: 5m              # wait 5m before sending updates about the same group
+  repeat_interval: 3h             # re-send a still-firing alert every 3h
+
+receivers:
+  - name: slack
+    slack_configs:
+      - api_url_file: /etc/alertmanager/slack_webhook_url   # secret kept in a separate file
+        channel: "#alerts"
+        send_resolved: true       # also tell us when it's fixed
+        title: '{{ .Status | toUpper }}: {{ .CommonLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.summary }} - {{ .Annotations.description }}{{ "\n" }}{{ end }}'

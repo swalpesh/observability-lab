@@ -1,0 +1,15 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus              # a fixed ID that dashboards will refer to
+    type: prometheus
+    access: proxy                # Grafana's server makes the queries, not your browser
+    url: http://prometheus:9090  # the Compose service name again
+    isDefault: true
+
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100

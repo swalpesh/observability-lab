@@ -1,0 +1,80 @@
+services:
+  # Our app, built from app/Dockerfile
+  orders-api:
+    build: ./app
+    environment:
+      LOKI_URL: http://loki:3100   # tells logger.js to ship logs to Loki
+    depends_on: [loki]             # start Loki first
+    ports:
+      - "8080:8080"
+
+  # Sends fake traffic to the app forever, so graphs have data
+  loadgen:
+    image: curlimages/curl:8.8.0
+    depends_on: [orders-api]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          curl -s -o /dev/null -X POST http://orders-api:8080/api/orders -H 'Content-Type: application/json' -d '{"item":"keyboard","quantity":1}'
+          curl -s -o /dev/null http://orders-api:8080/api/orders
+          curl -s -o /dev/null http://orders-api:8080/api/orders/missing-id
+          sleep 0.5
+        done
+
+  # Collects and stores metrics
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    volumes:
+      - ./prometheus:/etc/prometheus:ro   # our config folder, read-only
+      - prometheus-data:/prometheus       # keeps collected data across restarts
+    ports:
+      - "9090:9090"
+
+    # Routes alerts to Slack
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    volumes:
+      - ./alertmanager:/etc/alertmanager:ro
+    ports:
+      - "9093:9093"
+
+    # Dashboards
+  grafana:
+    image: grafana/grafana:11.1.0
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+
+  loki:
+    image: grafana/loki:3.1.0
+    command: ["-config.file=/etc/loki/loki.yml"]
+    volumes:
+      - ./loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki-data:/loki
+    ports:
+      - "3100:3100"
+
+  blackbox:
+    image: prom/blackbox-exporter:v0.25.0
+    command: ["--config.file=/etc/blackbox/blackbox.yml"]
+    volumes:
+      - ./blackbox:/etc/blackbox:ro
+    ports:
+      - "9115:9115"
+
+volumes:
+  prometheus-data:
+  loki-data:
